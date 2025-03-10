@@ -1,15 +1,24 @@
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 from bayes_opt import BayesianOptimization
+import os
+import json
 
-# 1) Define your categorical options.
+###########################################
+# Hull Suite Indicator Functions
+###########################################
+
+# 1) Define categorical options.
 MODES = ["Hma", "Ehma", "Thma"]
 SOURCES = ["close", "open", "high", "low"]
 
 # 2) Weighted moving average helper.
 def wma(series, window):
     weights = np.arange(1, window + 1)
-    return series.rolling(window).apply(lambda x: np.dot(x, weights) / weights.sum(), raw=True)
+    return series.rolling(window, min_periods=1).apply(
+        lambda x: np.dot(x, weights[:len(x)]) / weights[:len(x)].sum(), raw=True
+    )
 
 # 3) Hull Suite indicator variants.
 def HMA(src, length):
@@ -31,12 +40,13 @@ def THMA(src, length):
     half_length = max(1, int(round(length / 2)))
     return wma(3 * wma(src, third_length) - wma(src, half_length) - wma(src, length), length)
 
-# 4) Hull Suite hypothesis function:
-def compute_hull_suite_signal(df, source_col, mode, length, length_mult):
+# 4) Compute both MHULL and SHULL values from Hull Suite.
+def compute_hull_suite_values(df, source_col, mode, length, length_mult):
     """
     mode: one of 'Hma', 'Ehma', 'Thma'
     source_col: e.g. 'close', 'open', 'high', 'low'
     length, length_mult: numeric
+    Returns a tuple: (MHULL, SHULL) as pandas Series.
     """
     eff_length = int(round(length * length_mult))
     src = df[source_col]
@@ -49,49 +59,53 @@ def compute_hull_suite_signal(df, source_col, mode, length, length_mult):
         hull = THMA(src, eff_length / 2)
     else:
         raise ValueError(f"Invalid mode: {mode}")
-
+    
     hull_shifted = hull.shift(2)
-    predicted_signal = np.where(hull > hull_shifted, 1, 0)
-    return predicted_signal
+    return hull, hull_shifted
 
-# 5) Loss function: Mean Absolute Error
+# 5) Compute binary signal from hull values.
+def compute_hull_binary_signal(df, source_col, mode, length, length_mult):
+    MHULL, SHULL = compute_hull_suite_values(df, source_col, mode, length, length_mult)
+    binary_signal = np.where(MHULL > SHULL, 1, 0)
+    return binary_signal
+
+# 6) Loss function: Mean Absolute Error.
 def loss_function(predicted, target):
     return np.mean(np.abs(predicted - target))
 
-# 6) Load and prepare your CSV data
-df = pd.read_csv("target.csv")
+###########################################
+# Bayesian Optimization Setup for Training Hull Suite
+###########################################
+
+# Load and prepare CSV data.
+df = pd.read_csv("./CSVdata/updated_target.csv")
 # Assume columns: 'time', 'open', 'high', 'low', 'close', 'manual_signal'
+# Forward-fill the manual_signal column.
 df['manual_signal'] = df['manual_signal'].ffill().fillna(0)
 target = df['manual_signal'].values
 
-# 7) Define the objective function for Bayesian optimization.
+# Define the objective function for Bayesian optimization.
 def objective(length, length_mult, mode_idx, source_idx):
     """
-    length, length_mult: continuous hyperparameters
-    mode_idx, source_idx: continuous, but we will map them to integers
+    length, length_mult: continuous hyperparameters.
+    mode_idx, source_idx: continuous values mapped to integers.
     """
-    # Round to nearest integer to pick a valid index in MODES and SOURCES
     mode_idx = int(round(mode_idx))
     source_idx = int(round(source_idx))
-    
-    # Clip in case rounding goes out of bounds
     mode_idx = max(0, min(mode_idx, len(MODES) - 1))
     source_idx = max(0, min(source_idx, len(SOURCES) - 1))
     
     mode = MODES[mode_idx]
     source = SOURCES[source_idx]
     
-    # Convert length to an integer
     length = int(round(length))
     
-    predicted = compute_hull_suite_signal(df, source_col=source, mode=mode, length=length, length_mult=length_mult)
+    predicted = compute_hull_binary_signal(df, source_col=source, mode=mode, length=length, length_mult=length_mult)
     predicted = np.nan_to_num(predicted, nan=0)
     current_loss = loss_function(predicted, target)
-    # Bayesian optimization tries to maximize the objective, so return negative loss
-    return -current_loss
+    return -current_loss  # negative loss for maximization
 
-# 8) Define parameter bounds (continuous ranges).
-# For mode_idx: [0, len(MODES)-1], for source_idx: [0, len(SOURCES)-1]
+# Define parameter bounds.
 pbounds = {
     'length': (20, 100),
     'length_mult': (0.5, 2.0),
@@ -99,7 +113,6 @@ pbounds = {
     'source_idx': (0, len(SOURCES) - 1),
 }
 
-# 9) Initialize Bayesian Optimizer
 optimizer = BayesianOptimization(
     f=objective,
     pbounds=pbounds,
@@ -107,17 +120,80 @@ optimizer = BayesianOptimization(
     verbose=2
 )
 
-# 10) Run the optimizer
 optimizer.maximize(init_points=5, n_iter=20)
 
-# 11) Retrieve the best parameters found
 best_params = optimizer.max['params']
-best_loss = -optimizer.max['target']  # we returned negative loss, so invert
-print("Best param set:", best_params)
-print("Best loss:", best_loss)
+best_loss = -optimizer.max['target']
+print("Best parameter set:", best_params)
+print("Best Loss (MAE):", best_loss)
 
-# 12) Map the best mode_idx/source_idx to actual strings
 best_mode = MODES[int(round(best_params['mode_idx']))]
 best_source = SOURCES[int(round(best_params['source_idx']))]
+best_length = int(round(best_params['length']))
+best_length_mult = best_params['length_mult']
 print("Best mode:", best_mode)
 print("Best source:", best_source)
+
+# Save the best parameters to a JSON file.
+
+def save_settings(settings, filename):
+    with open(os.path.join("./MTPI", filename), "w") as f:
+        json.dump(settings, f, indent=4)
+
+# Construct the settings dictionary for Hull Suite.
+best_settings = {
+    "mode": best_mode,
+    "source": best_source,
+    "length": best_length,
+    "length_mult": best_length_mult
+}
+
+# Save these settings to a JSON file.
+save_settings(best_settings, "./settings/hull_suite_settings.json")
+
+
+
+###########################################
+# Compute Hull Suite Indicator Values with Best Parameters
+###########################################
+MHULL, SHULL = compute_hull_suite_values(df, best_source, best_mode, best_length, best_length_mult)
+MHULL = pd.Series(MHULL, index=df.index)
+SHULL = pd.Series(SHULL, index=df.index)
+
+# Compute binary signal for equity: if MHULL > SHULL, signal = 1; else 0.
+binary_signal = (MHULL > SHULL).astype(int)
+
+###########################################
+# Equity Curve Calculation
+###########################################
+equity = [1.0]
+close_prices = df['close'].values
+for i in range(1, len(close_prices)):
+    if binary_signal[i] == 1:
+        equity.append(equity[-1] * (close_prices[i] / close_prices[i - 1]))
+    else:
+        equity.append(equity[-1])
+equity = np.array(equity)
+
+###########################################
+# Plotting: One Figure with Two Subplots
+###########################################
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10), sharex=True)
+
+# Subplot 1: BTC Price with MHULL and SHULL Overlaid.
+ax1.plot(df.index, df['close'], label='BTC Price', color='black', linewidth=1.5)
+ax1.plot(MHULL.index, MHULL, label='MHULL', color='blue', linewidth=1.5)
+ax1.plot(SHULL.index, SHULL, label='SHULL', color='red', linewidth=1.5)
+ax1.set_title("BTC Price with Hull Suite Overlay (MHULL & SHULL)")
+ax1.set_ylabel("Price / Indicator")
+ax1.legend(loc='upper left')
+
+# Subplot 2: Equity Curve Based on Hull Binary Signal.
+ax2.plot(df.index, equity, label='Equity Curve', color='orange', linewidth=2)
+ax2.set_title("Equity Curve Based on Hull Suite Signal")
+ax2.set_xlabel("Date")
+ax2.set_ylabel("Equity")
+ax2.legend(loc='upper left')
+
+plt.tight_layout()
+plt.show()

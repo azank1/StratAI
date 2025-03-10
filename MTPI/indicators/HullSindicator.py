@@ -94,53 +94,53 @@ def hull_suite_indicator(df,
 # ----------------------------
 # Example usage:
 # ----------------------------
-if __name__ == "__main__":
-    # Load your CSV data. Adjust file path and date column name as needed.
-    # For example:
-    # df = pd.read_csv("your_data.csv", parse_dates=["Date"], index_col="Date")
+# if __name__ == "__main__":
+#     # Load your CSV data. Adjust file path and date column name as needed.
+#     # For example:
+#     # df = pd.read_csv("your_data.csv", parse_dates=["Date"], index_col="Date")
     
-    # For demonstration purposes, we'll create a dummy DataFrame.
-    dates = pd.date_range(start="2023-01-01", periods=200, freq="D")
-    np.random.seed(42)
-    prices = np.random.lognormal(mean=0, sigma=0.02, size=200).cumprod() * 100
-    df = pd.read_csv("./CSVdata/BTC.csv")
+#     # For demonstration purposes, we'll create a dummy DataFrame.
+#     dates = pd.date_range(start="2023-01-01", periods=200, freq="D")
+#     np.random.seed(42)
+#     prices = np.random.lognormal(mean=0, sigma=0.02, size=200).cumprod() * 100
+#     df = pd.read_csv("./CSVdata/BTC.csv")
     
-    # Calculate the Hull Suite indicator.
-    df = hull_suite_indicator(df, mode="Hma", length=55)
+#     # Calculate the Hull Suite indicator.
+#     df = hull_suite_indicator(df, mode="Hma", length=55)
     
-    # Plot the close price and Hull indicator.
-    fig, ax = plt.subplots(figsize=(12, 6))
+#     # Plot the close price and Hull indicator.
+#     fig, ax = plt.subplots(figsize=(12, 6))
     
-    # Plot the price data.
-    ax.plot(df.index, df["close"], label="Price", color="black", linewidth=1.5)
+#     # Plot the price data.
+#     ax.plot(df.index, df["close"], label="Price", color="black", linewidth=1.5)
     
-    # Plot the MHULL indicator.
-    ax.plot(df.index, df["MHULL"], label="MHULL", color="blue", linewidth=2)
+#     # Plot the MHULL indicator.
+#     ax.plot(df.index, df["MHULL"], label="MHULL", color="blue", linewidth=2)
     
-    # Plot the shifted Hull indicator (SHULL) if visual_switch is True.
-    ax.plot(df.index, df["SHULL"], label="SHULL", color="gray", linewidth=2)
+#     # Plot the shifted Hull indicator (SHULL) if visual_switch is True.
+#     ax.plot(df.index, df["SHULL"], label="SHULL", color="gray", linewidth=2)
     
-    # Fill the area between MHULL and SHULL using the hull_color array.
-    # For each continuous segment with the same color, we fill separately.
-    current_color = None
-    start_idx = 0
-    for i in range(len(df)):
-        col = df["hull_color"].iloc[i]
-        if current_color is None:
-            current_color = col
-        if col != current_color or i == len(df)-1:
-            # Determine the segment range.
-            end_idx = i if col != current_color else i+1
-            ax.fill_between(df.index[start_idx:end_idx],
-                            df["MHULL"].iloc[start_idx:end_idx],
-                            df["SHULL"].iloc[start_idx:end_idx],
-                            color=current_color, alpha=0.3)
-            start_idx = i
-            current_color = col
+#     # Fill the area between MHULL and SHULL using the hull_color array.
+#     # For each continuous segment with the same color, we fill separately.
+#     current_color = None
+#     start_idx = 0
+#     for i in range(len(df)):
+#         col = df["hull_color"].iloc[i]
+#         if current_color is None:
+#             current_color = col
+#         if col != current_color or i == len(df)-1:
+#             # Determine the segment range.
+#             end_idx = i if col != current_color else i+1
+#             ax.fill_between(df.index[start_idx:end_idx],
+#                             df["MHULL"].iloc[start_idx:end_idx],
+#                             df["SHULL"].iloc[start_idx:end_idx],
+#                             color=current_color, alpha=0.3)
+#             start_idx = i
+#             current_color = col
 
-    ax.set_title("Price with Hull Suite Indicator")
-    ax.set_xlabel("Date")
-    ax.set_ylabel("Price / Hull Value")
-    ax.legend()
-    plt.tight_layout()
-    plt.show()
+#     ax.set_title("Price with Hull Suite Indicator")
+#     ax.set_xlabel("Date")
+#     ax.set_ylabel("Price / Hull Value")
+#     ax.legend()
+#     plt.tight_layout()
+#     plt.show()

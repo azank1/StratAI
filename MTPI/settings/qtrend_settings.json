@@ -1,0 +1,9 @@
+{
+    "p": 210,
+    "atr_p": 10,
+    "mult": 1.7372263054820622,
+    "mode": "Type A",
+    "source": "high",
+    "use_ema_smoother": true,
+    "src_ema_period": 2
+}

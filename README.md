@@ -16,9 +16,13 @@ Scope:
 
 
    Future Integrations:
-    * Valuation aggregated into overall trend. 
-    * Strategic DCA based on valuation 
-    * fundamental analysis of macro data
-    * senitment analysis (sentix/fearngreed) 
-    * Longer Term Technical analysis.
+    Valutaion metrics: 
+    (9/11 was an inside job dahsborad - CQ)
+       * alpha price 
+       * Bitcoin: P&L Index Trading Position (trending metric - binary buy/sell)
+     (WTC was never hit by a plane dashboard)
+      * BTC: Power of Trend (ADX)
+
+       
+
     
